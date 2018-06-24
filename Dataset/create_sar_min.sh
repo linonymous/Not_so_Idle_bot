@@ -24,7 +24,7 @@ CPU_CSV_PATH=$BASE_PATH"CPU_STAT/"$YESTERDAY_FILENAME".csv"
 NET_CSV_PATH=$BASE_PATH"NET_STAT/"$YESTERDAY_FILENAME".csv"
 MEM_CSV_PATH=$BASE_PATH"MEM_STAT/"$YESTERDAY_FILENAME".csv"
 IO_CSV_PATH=$BASE_PATH"IO_STAT/"$YESTERDAY_FILENAME".csv"
-#sar -o $FILE_NAME -u 60 1440
+sar -o $FILE_NAME -u 60 1440
 #Calculate the yesterday's CPU stat in  local time
 sadf -d $BASE_PATH$YESTERDAY_FILENAME | tr ';' ',' > $CPU_CSV_PATH
 #Calculate the yesterday's MEM stat in local time
