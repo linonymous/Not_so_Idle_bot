@@ -1,21 +1,28 @@
 import os
 import pandas as pd
-
+import numpy as np
 
 class CSVFileManager:
 
     DELIMITER = ','
 
-    def __init__(self, filename):
+    def __init__(self, filename, interval, df=None):
         self.filename = filename
         self.data = None
+        self.interval = interval
+        self.read_file()
+        if filename is None:
+            self.data = df
 
     def read_file(self):
+        if self.filename is None:
+            return
         self.data = pd.read_csv(self.filename, delimiter=self.DELIMITER, index_col=None)
 
     def write_file(self, filename=None):
         if filename is None:
-            filename = self.filename
+            print("Error:000 write target file is None")
+            return
         self.data.to_csv(filename, index=False)
 
     def delete_column(self, column_index=None):
@@ -23,8 +30,24 @@ class CSVFileManager:
             self.data.drop(column_index, axis=1, inplace=True)
 
     def delete_row(self, row_index=None):
-        pass
+        if row_index is None:
+            print("Error:001 index to delete row is None")
+            return
+        self.data.drop(self.data.index[[row_index]])
 
+    def get_by_interval(self, interval=1):
+        if self.interval > interval:
+            print(f'Error:002 Intervals can not be smaller than {self.interval}')
+            return
+        if self.interval == interval:
+            return self.data
+        gap = (int)(interval / self.interval)
+        length = self.data.shape[0]
+        tmp = (self.data.loc[[0]])
+        rows = [i for i in range(gap, length, gap)]
+        for row in rows:
+            tmp = tmp.append(self.data.iloc[[row]], ignore_index=True)
+        self.data = tmp
 
 def merge_csv_files(path, file_identifier=None, output_file=None, columns_to_drop=None):
     """
@@ -57,5 +80,8 @@ def merge_csv_files(path, file_identifier=None, output_file=None, columns_to_dro
 
 if __name__ == "__main__":
 
-    path = 'path-to-csvs'
-    merge_csv_files(path=path)
+    # path = 'path-to-csvs'
+    # merge_csv_files(path=path)
+    csv_file_manager = CSVFileManager('C://Users//Mahesh.Bhosale//PycharmProjects//VRTS//SWALKE//IO_STAT//2018-06-18-Mon_min.csv', 60)
+    csv_file_manager.get_by_interval(30)
+    # print(csv_file_manager.data)
