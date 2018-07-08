@@ -64,7 +64,7 @@ def merge_csv_files(path, file_identifier=None, output_file=None, columns_to_dro
     if file_identifier is None:
         file_identifier = '.'
 
-    file_objs = [CSVFileManager(path + filename) for filename in os.listdir(path) if file_identifier in filename]
+    file_objs = [CSVFileManager(path + filename, 60) for filename in os.listdir(path) if file_identifier in filename]
     merged_data = None
     for file_obj in file_objs:
         file_obj.read_file()
@@ -77,11 +77,3 @@ def merge_csv_files(path, file_identifier=None, output_file=None, columns_to_dro
     file_objs[0].data = merged_data
     file_objs[0].write_file(filename=output_file)
 
-
-if __name__ == "__main__":
-
-    # path = 'path-to-csvs'
-    # merge_csv_files(path=path)
-    csv_file_manager = CSVFileManager('C://Users//Mahesh.Bhosale//PycharmProjects//VRTS//SWALKE//IO_STAT//2018-06-18-Mon_min.csv', 60)
-    csv_file_manager.get_by_interval(30)
-    # print(csv_file_manager.data)
