@@ -7,6 +7,12 @@ class CSVFileManager:
     DELIMITER = ','
 
     def __init__(self, filename, interval, df=None):
+        """
+        Manages CSV data, and would be used a s primary class while writing and reading the data
+        :param filename: csv file from where data would be read
+        :param interval: interval by which data is separated in sec
+        :param df: dataframe from which data would be loaded
+        """
         self.filename = filename
         self.data = None
         self.interval = interval
@@ -36,6 +42,12 @@ class CSVFileManager:
         self.data.drop(self.data.index[[row_index]])
 
     def get_by_interval(self, interval=1):
+        """
+        Function separates self.data by given interval in sec, and updates self.data and self.interval
+        :param interval: interval by which data would be updated in data attribute of object in seconds, must be greater
+         than self.interval
+        :return: None
+        """
         if self.interval > interval:
             print(f'Error:002 Intervals can not be smaller than {self.interval}')
             return
