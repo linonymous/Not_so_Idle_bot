@@ -48,6 +48,7 @@ class CSVFileManager:
         for row in rows:
             tmp = tmp.append(self.data.iloc[[row]], ignore_index=True)
         self.data = tmp
+        self.interval = interval
 
 def merge_csv_files(path, file_identifier=None, output_file=None, columns_to_drop=None):
     """
