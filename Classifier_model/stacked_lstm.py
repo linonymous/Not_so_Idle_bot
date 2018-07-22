@@ -1,34 +1,33 @@
 from __future__ import print_function
 import numpy as np
+import pandas as pd
 import torch
 import torch.optim as optim
 import torch.nn as nn
 import matplotlib
 from Dataset.data_handler.CSVFileManager import CSVFileManager
-matplotlib.use('Agg')
+from Dataset.data_visualization.DataVisualizer import DataVisualizer
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
 class Sequence(nn.Module):
     def __init__(self):
         super(Sequence, self).__init__()
-        self.lstm1 = nn.LSTMCell(200, 51)
+        self.lstm1 = nn.LSTMCell(1, 51)
         self.lstm2 = nn.LSTMCell(51, 51)
         self.linear = nn.Linear(51, 1)
 
     def forward(self, input, future = 0):
-        # input = np.expand_dims(input, axis = 0)
-        # print(input.size())
-        # print(type(input))
-        # print(type(input))
-        h_t = torch.zeros(input.size(0), 51, dtype=torch.double)
-        c_t = torch.zeros(input.size(0), 51, dtype=torch.double)
-        h_t2 = torch.zeros(input.size(0), 51, dtype=torch.double)
-        c_t2 = torch.zeros(input.size(0), 51, dtype=torch.double)
+        # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = "cpu"
+        h_t = torch.zeros(input.size(0), 51, dtype=torch.double).to(device)
+        c_t = torch.zeros(input.size(0), 51, dtype=torch.double).to(device)
+        h_t2 = torch.zeros(input.size(0), 51, dtype=torch.double).to(device)
+        c_t2 = torch.zeros(input.size(0), 51, dtype=torch.double).to(device)
         outputs = []
 
-        for i, input_t in enumerate(input.chunk(chunks = input.size(1), dim=1)):
-            print(input_t.size())
+        for i, input_t in enumerate(input.chunk(input.size(1), dim=1)):
             h_t, c_t = self.lstm1(input_t, (h_t, c_t))
             h_t2, c_t2 = self.lstm2(h_t, (h_t2, c_t2))
             output = self.linear(h_t2)
@@ -45,33 +44,44 @@ class Sequence(nn.Module):
 if __name__ == '__main__':
     np.random.seed(0)
     torch.manual_seed(0)
-    PATH = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//Data//IO_STATS.csv'
+    PATH = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//Data//IO_STAT.csv'
     csv_mgr = CSVFileManager(filename=PATH, interval=60)
-    # print(csv_mgr.data)
-    data = csv_mgr.data.iloc[:20001, 1]
-    test_data = csv_mgr.data.iloc[20002: 20803, 1]
+    csv_mgr.get_by_interval(interval=180)
+    data_visualizer = DataVisualizer(csv_mgr=csv_mgr, x_col='timestamp', y_col='tps')
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = "cpu"
+    total_size = csv_mgr.data.shape[0]
+    seq_length = 672
+    data_size = 13441
+    test_size = total_size - data_size
+    test_size = seq_length
+    data = csv_mgr.data.iloc[:data_size, 1]
+    test_data = csv_mgr.data.iloc[data_size :data_size + test_size + 1, 1]
     input = data.iloc[:-1]
     target = data.iloc[1:]
-    input = input.values.reshape(200, 100)
-    target = target.values.reshape(200, 100)
-    test_input = test_data.iloc[:-1]
-    test_target = test_data.iloc[1:]
-    test_input = test_input.values.reshape(200, 4)
-    test_target = test_target.values.reshape(200, 4)
-    test_input = torch.from_numpy(test_input)
-    test_target = torch.from_numpy(test_target)
-    # print(test_input.size(), test_target.size())
+    test_input = test_data[:-1]
+    test_target = test_data[1:]
+    # seq_length = 3360
+    input = input.values.reshape(-1, seq_length)
+    target = target.values.reshape(-1, seq_length)
+    test_input = test_input.values.reshape(-1, seq_length)
+    test_target = test_target.values.reshape(-1, seq_length)
     input = torch.from_numpy(input)
     target = torch.from_numpy(target)
-    # print(input.size(1))
-    # print(data)
-    # print(input, type(input), input.shape)
-    # print(target, type(target), target.shape)
+    test_input = torch.from_numpy(test_input)
+    test_target = torch.from_numpy(test_target)
     seq = Sequence()
+    seq.to(device)
     seq.double()
+    input = input.to(device)
+    target = target.to(device)
+    input.double()
+    target.double()
+    test_input = test_input.to(device)
+    test_target = test_target.to(device)
     crieterion = nn.MSELoss()
-    optimizer = optim.LBFGS(seq.parameters(), lr=0.08)
-    for epoch in range(15):
+    optimizer = optim.LBFGS(seq.parameters(), lr=0.1)
+    for epoch in range(30):
         print('EPOCH: ', epoch)
 
         def closure():
@@ -83,12 +93,14 @@ if __name__ == '__main__':
             return loss
         optimizer.step(closure)
     with torch.no_grad():
-        future = 4
+        future = 1
         pred = seq(test_input, future=future)
         loss = crieterion(pred[:, :-future], test_target)
-        print(pred, test_target)
         print('test loss:', loss.item())
         y = pred.detach().numpy()
+    pf = pd.DataFrame(pred[:, :-future].numpy())
+    print(pf, test_target)
+    future = CSVFileManager(interval = 60, df=pf)
     # draw the result
     # plt.figure(figsize=(30, 10))
     # plt.title('Predict future values for time sequences\n(Dashlines are predicted values)', fontsize=30)
