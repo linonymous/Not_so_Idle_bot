@@ -41,7 +41,7 @@ class Seq2seq(nn.Module):
                     list_h[j] = h_t
                     list_c[j] = c_t
                 else:
-                    h_t, c_t = (self.cell_list[j])(list_h[j-1], (list_h[j], list_c[j]))
+                    h_t, c_t = (self.cell_list[j])(list_h[j - 1], (list_h[j], list_c[j]))
                     list_h[j] = h_t
                     list_c[j] = c_t
             output = self.linear(list_h[self.num_cells - 1])
@@ -51,71 +51,87 @@ class Seq2seq(nn.Module):
                 if j == 0:
                     list_h[j], list_c[j] = (self.cell_list[j])(output, (list_h[j], list_c[j]))
                 else:
-                    list_h[j], list_c[j] = (self.cell_list[j])(list_h[j-1], (list_h[j], list_c[j]))
+                    list_h[j], list_c[j] = (self.cell_list[j])(list_h[j - 1], (list_h[j], list_c[j]))
             output = self.linear(list_h[self.num_cells - 1])
             outputs += [output]
         outputs = torch.stack(outputs, 1).squeeze(2)
         return outputs
 
 
-if __name__ == '__main__':
+def pre_train(path):
     np.random.seed(0)
     torch.manual_seed(0)
-    PATH = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//dataset//data//CPU_STAT//CPU_STAT_08.csv'
-    csv_mgr = CSVFileManager(filename=PATH, interval=1)
+    csv_mgr = CSVFileManager(filename=path, interval=1)
     csv_mgr.get_by_interval(interval=180)
-    total_size = csv_mgr.data.shape[0]
-    seq_length = 672
+    return csv_mgr
+
+
+def train(csv_data, seq_l, num_epochs, num_hidden, num_cells, print_test=50):
     data_size = 13441
-    number_epochs = 1
-    number_hidden = 10
-    number_cells = 3
-    test_size = seq_length
-    data = csv_mgr.data.iloc[:data_size, 9]
-    test_data = csv_mgr.data.iloc[data_size:data_size + test_size + 1, 9]
-    test_visualize = pd.DataFrame(csv_mgr.data.iloc[data_size:data_size + test_size, 2], columns=['timestamp'])
+    data = csv_data.data.iloc[:data_size, 9]
     iput = data.iloc[:-1]
     target = data.iloc[1:]
-    test_iput = test_data[:-1]
-    test_target = test_data[1:]
     iput = torch.from_numpy(iput.values.reshape(-1, seq_length))
     target = torch.from_numpy(target.values.reshape(-1, seq_length))
-    test_iput = torch.from_numpy(test_iput.values.reshape(-1, seq_length))
-    test_target = torch.from_numpy(test_target.values.reshape(-1, seq_length))
-    seq = Seq2seq(num_hidden=number_hidden, num_cells=number_cells)
+    seq = Seq2seq(num_hidden=num_hidden, num_cells=num_cells)
     seq.to(seq.device)
     seq.double()
     iput = iput.to(seq.device)
     target = target.to(seq.device)
     iput.double()
     target.double()
-    test_iput = test_iput.to(seq.device)
-    test_target = test_target.to(seq.device)
     criteria = nn.MSELoss()
     optimizer = optim.LBFGS(seq.parameters(), lr=0.1)
-    future = 1
-    for epoch in range(number_epochs):
+    for epoch in range(num_epochs):
         print('EPOCH: ', epoch)
+
         def closure():
             optimizer.zero_grad()
             out = seq(iput)
-            loss = criteria(out, target)
-            print('loss:', loss.item())
-            loss.backward()
-            return loss
+            l = criteria(out, target)
+            print('loss:', l.item())
+            l.backward()
+            return l
+
         optimizer.step(closure)
-        if (epoch + 1) % 100 == 0:
-            with torch.no_grad():
-                pred = seq(test_iput, future=future)
-                loss = criteria(pred[:, :-future], test_target)
-                print('test loss:', loss.item())
-                y = pred.cpu().detach().numpy()
-            pred = torch.squeeze(pred)
-            pf = pd.DataFrame(pred[:-future].cpu().numpy(), columns=['idle'])
-            pf['timestamp'] = test_visualize.timestamp.values
-            ft = CSVFileManager(interval=180, df=pf)
-            test_visualize.reset_index(drop=True, inplace=True)
-            test_data.reset_index(drop=True, inplace=True)
-            test_visualize['idle'] = test_data[:-1]
-            ft = DataVisualizer(csv_mgr=ft, x_col='timestamp', y_col='idle')
-            ft.forecast(compare_data=test_visualize, column_list=['timestamp', 'idle'])
+        if (epoch + 1) % print_test == 0:
+            test(csv_data=csv_data, data_size=data_size, test_size=seq_l, seq=seq, future=1)
+    return seq
+
+
+def test(csv_data, data_size, test_size, seq, future):
+    test_data = csv_data.data.iloc[data_size:data_size + test_size + 1, 9]
+    test_visualize = pd.DataFrame(csv_data.data.iloc[data_size:data_size + test_size, 2], columns=['timestamp'])
+    test_iput = test_data[:-1]
+    test_target = test_data[1:]
+    test_iput = torch.from_numpy(test_iput.values.reshape(-1, seq_length))
+    test_target = torch.from_numpy(test_target.values.reshape(-1, seq_length))
+    test_iput = test_iput.to(seq.device)
+    test_target = test_target.to(seq.device)
+    criteria = nn.MSELoss()
+    with torch.no_grad():
+        pred = seq(test_iput, future=future)
+        l = criteria(pred[:, :-future], test_target)
+        print('test loss:', l.item())
+        y = pred.cpu().detach().numpy()
+    pred = torch.squeeze(pred)
+    pf = pd.DataFrame(pred[:-future].cpu().numpy(), columns=['idle'])
+    pf['timestamp'] = test_visualize.timestamp.values
+    ft = CSVFileManager(interval=180, df=pf)
+    test_visualize.reset_index(drop=True, inplace=True)
+    test_data.reset_index(drop=True, inplace=True)
+    test_visualize['idle'] = test_data[:-1]
+    ft = DataVisualizer(csv_mgr=ft, x_col='timestamp', y_col='idle')
+    ft.forecast(compare_data=test_visualize, column_list=['timestamp', 'idle'])
+
+
+if __name__ == '__main__':
+    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//dataset//data//CPU_STAT//CPU_STAT_08.csv'
+    csv_data_mgr = pre_train(path=path)
+    seq_length = 672
+    number_epochs = 1
+    number_hidden = 10
+    number_cells = 3
+    test_size = seq_length
+    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, num_epochs=number_epochs, num_hidden=number_hidden,
+                num_cells=number_cells)
