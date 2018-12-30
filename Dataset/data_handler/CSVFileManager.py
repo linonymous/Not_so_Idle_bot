@@ -106,3 +106,8 @@ def merge_csv_files(path, file_identifier=None, output_file=None, columns_to_dro
     file_objs[0].data = merged_data
     file_objs[0].write_file(filename=output_file)
 
+
+if __name__ == '__main__':
+    merge_csv_files(path='C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//Sar//IO_STAT//AUG//',
+                    file_identifier="sec", output_file="C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//"
+                                                       "Dataset//data//IO_STAT//IO_STAT-08.csv")
