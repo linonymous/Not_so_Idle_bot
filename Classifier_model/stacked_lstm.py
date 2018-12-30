@@ -4,17 +4,23 @@ import pandas as pd
 import torch
 import torch.optim as optim
 import torch.nn as nn
+import math
 from Dataset.data_handler.CSVFileManager import CSVFileManager
 from Dataset.data_visualization.DataVisualizer import DataVisualizer
 
 
 class Seq2seq(nn.Module):
     def __init__(self, num_hidden, num_cells):
+        """
+        Initialize the classifier
+        :param num_hidden: Number of hidden units of LSTM
+        :param num_cells: Number of LSTM cells in the NN, equivalent to number of layers
+        """
         super(Seq2seq, self).__init__()
         self.num_cells = num_cells
         self.num_hidden = num_hidden
         self.cell_list = []
-        if self.num_cells > 5 or self.num_hidden > 51:
+        if self.num_cells > 5 and self.num_hidden > 51:
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         else:
             self.device = "cpu"
@@ -26,6 +32,12 @@ class Seq2seq(nn.Module):
         self.linear = nn.Linear(num_hidden, 1)
 
     def forward(self, iput, future=0):
+        """
+        Forward pass of the classifier
+        :param iput: input dataframe for training/testing
+        :param future: Number of future steps to be predicted
+        :return: returns outputs
+        """
         list_h = []
         list_c = []
         for i in range(0, self.num_cells):
@@ -34,6 +46,7 @@ class Seq2seq(nn.Module):
             c_t = torch.zeros(iput.size(0), self.num_hidden, dtype=torch.double).to(self.device)
             list_c += [c_t]
         outputs = []
+        print(iput.size(1))
         for i, iput_t in enumerate(iput.chunk(iput.size(1), dim=1)):
             for j in range(0, self.num_cells):
                 if j == 0:
@@ -59,6 +72,11 @@ class Seq2seq(nn.Module):
 
 
 def pre_train(path):
+    """
+    Pre train work
+    :param path: Complete path of the csv file for the data
+    :return: Return initialized CSVFileManager object
+    """
     np.random.seed(0)
     torch.manual_seed(0)
     csv_mgr = CSVFileManager(filename=path, interval=1)
@@ -66,9 +84,24 @@ def pre_train(path):
     return csv_mgr
 
 
-def train(csv_data, seq_l, num_epochs, num_hidden, num_cells, print_test=50):
-    data_size = 13441
-    data = csv_data.data.iloc[:data_size, 9]
+def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hidden, num_cells, print_test_loss=1):
+    """
+    train the classifier and print the training loss of the each epoch. Uses MSEloss as criteria
+    :param csv_data: CSVFileManager object containing test data
+    :param train_to_test: Train to test data size ratio between 0-1 exclusive
+    :param data_col: # column of the target data in csv_data.data dataframe
+    :param time_col: # column of the target timestamp in csv_data.data dataframe
+    :param seq_l: sequence length
+    :param num_epochs: Number of training cycles
+    :param num_hidden: Number of hidden units
+    :param num_cells: Number of LSTM cells
+    :param print_test_loss: Number of epochs after which testloss is evaluated
+    :return: trained LSTM classifier
+    """
+    total_size = csv_data.data.shape[0]
+    train_size = math.floor(total_size*train_to_test)
+    train_size = math.floor(train_size/seq_l)*seq_l
+    data = csv_data.data.iloc[:train_size + 1, data_col]
     iput = data.iloc[:-1]
     target = data.iloc[1:]
     iput = torch.from_numpy(iput.values.reshape(-1, seq_length))
@@ -88,35 +121,52 @@ def train(csv_data, seq_l, num_epochs, num_hidden, num_cells, print_test=50):
         def closure():
             optimizer.zero_grad()
             out = seq(iput)
-            l = criteria(out, target)
-            print('loss:', l.item())
-            l.backward()
-            return l
+            l_train = criteria(out, target)
+            print('loss:', l_train.item())
+            l_train.backward()
+            return l_train
 
         optimizer.step(closure)
-        if (epoch + 1) % print_test == 0:
-            test(csv_data=csv_data, data_size=data_size, test_size=seq_l, seq=seq, future=1)
+        if (epoch + 1) % print_test_loss == 0:
+            test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
+                 time_col=time_col, seq=seq, future=1)
     return seq
 
 
-def test(csv_data, data_size, test_size, seq, future):
-    test_data = csv_data.data.iloc[data_size:data_size + test_size + 1, 9]
-    test_visualize = pd.DataFrame(csv_data.data.iloc[data_size:data_size + test_size, 2], columns=['timestamp'])
+def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
+    """
+    test the the classifier and visualizes the predicted and actual values, does not print the visualization of
+    the future. Uses MSEloss as criteria
+    :param csv_data: CSVFileManager object containing training data
+    :param train_size: size of the train data for iloc
+    :param test_size: size of the test data for iloc
+    :param data_col: # column of the target data in csv_data.data dataframe
+    :param time_col: # column of the target timestamp in csv_data.data dataframe
+    :param seq: sequence length
+    :param future: number of future steps to be predicted, can not be greater than test_size as some part of test data
+    would be used for future predictions
+    :return:
+    """
+    if future > test_size:
+        raise Invalid
+    test_data = csv_data.data.iloc[train_size:train_size + test_size + 1, data_col]
+    test_visualize = pd.DataFrame(csv_data.data.iloc[train_size:train_size + test_size, time_col], columns=['timestamp'])
     test_iput = test_data[:-1]
     test_target = test_data[1:]
-    test_iput = torch.from_numpy(test_iput.values.reshape(-1, seq_length))
-    test_target = torch.from_numpy(test_target.values.reshape(-1, seq_length))
+    # I am not convinced why test_size - 1, on perfect multiple train and test sizes this could break.
+    test_iput = torch.from_numpy(test_iput.values.reshape(-1, test_size - 1 ))
+    test_target = torch.from_numpy(test_target.values.reshape(-1, test_size - 1))
     test_iput = test_iput.to(seq.device)
     test_target = test_target.to(seq.device)
     criteria = nn.MSELoss()
+    print(test_iput.size(1), test_target.size(1))
     with torch.no_grad():
         pred = seq(test_iput, future=future)
-        l = criteria(pred[:, :-future], test_target)
-        print('test loss:', l.item())
-        y = pred.cpu().detach().numpy()
+        l_test = criteria(pred[:, :-future], test_target)
+        print('test loss:', l_test.item())
     pred = torch.squeeze(pred)
     pf = pd.DataFrame(pred[:-future].cpu().numpy(), columns=['idle'])
-    pf['timestamp'] = test_visualize.timestamp.values
+    pf['timestamp'] = test_visualize.iloc[0, :]
     ft = CSVFileManager(interval=180, df=pf)
     test_visualize.reset_index(drop=True, inplace=True)
     test_data.reset_index(drop=True, inplace=True)
@@ -126,12 +176,12 @@ def test(csv_data, data_size, test_size, seq, future):
 
 
 if __name__ == '__main__':
-    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//dataset//data//CPU_STAT//CPU_STAT_08.csv'
+    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//CPU_STAT//CPU_STAT_06.csv'
     csv_data_mgr = pre_train(path=path)
     seq_length = 672
     number_epochs = 1
-    number_hidden = 10
+    number_hidden = 51
     number_cells = 3
     test_size = seq_length
-    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, num_epochs=number_epochs, num_hidden=number_hidden,
-                num_cells=number_cells)
+    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.8, data_col=9, time_col=2,
+                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells)
