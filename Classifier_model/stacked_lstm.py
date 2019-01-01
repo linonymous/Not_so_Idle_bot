@@ -46,7 +46,6 @@ class Seq2seq(nn.Module):
             c_t = torch.zeros(iput.size(0), self.num_hidden, dtype=torch.double).to(self.device)
             list_c += [c_t]
         outputs = []
-        print(iput.size(1))
         for i, iput_t in enumerate(iput.chunk(iput.size(1), dim=1)):
             for j in range(0, self.num_cells):
                 if j == 0:
@@ -71,16 +70,32 @@ class Seq2seq(nn.Module):
         return outputs
 
 
-def pre_train(path):
+class Error(Exception):
+    """
+   Base class for other exceptions
+   """
+    pass
+
+
+class RequirementNotSatisfied(Error):
+    """
+    Exception class for catching the errors with invalid parameter values
+    """
+    pass
+
+
+def pre_train(path, interval, get_by_interval):
     """
     Pre train work
     :param path: Complete path of the csv file for the data
+    :param interval: interval in sec by which the data rows are separated in path csv
+    :param get_by_interval: interval in sec by which csv data mgr will have data rows separated of the path csv
     :return: Return initialized CSVFileManager object
     """
     np.random.seed(0)
     torch.manual_seed(0)
-    csv_mgr = CSVFileManager(filename=path, interval=1)
-    csv_mgr.get_by_interval(interval=180)
+    csv_mgr = CSVFileManager(filename=path, interval=interval)
+    csv_mgr.get_by_interval(interval=get_by_interval)
     return csv_mgr
 
 
@@ -147,10 +162,12 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     would be used for future predictions
     :return:
     """
-    if future > test_size:
-        raise Invalid
+    if future >= test_size:
+        raise RequirementNotSatisfied
     test_data = csv_data.data.iloc[train_size:train_size + test_size + 1, data_col]
     test_visualize = pd.DataFrame(csv_data.data.iloc[train_size:train_size + test_size, time_col], columns=['timestamp'])
+    test_visualize.reset_index(drop=True, inplace=True)
+    test_data.reset_index(drop=True, inplace=True)
     test_iput = test_data[:-1]
     test_target = test_data[1:]
     # I am not convinced why test_size - 1, on perfect multiple train and test sizes this could break.
@@ -159,29 +176,54 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     test_iput = test_iput.to(seq.device)
     test_target = test_target.to(seq.device)
     criteria = nn.MSELoss()
-    print(test_iput.size(1), test_target.size(1))
     with torch.no_grad():
         pred = seq(test_iput, future=future)
         l_test = criteria(pred[:, :-future], test_target)
         print('test loss:', l_test.item())
     pred = torch.squeeze(pred)
     pf = pd.DataFrame(pred[:-future].cpu().numpy(), columns=['idle'])
-    pf['timestamp'] = test_visualize.iloc[0, :]
+    pf['timestamp'] = test_visualize.iloc[:, 0]
     ft = CSVFileManager(interval=180, df=pf)
-    test_visualize.reset_index(drop=True, inplace=True)
-    test_data.reset_index(drop=True, inplace=True)
     test_visualize['idle'] = test_data[:-1]
     ft = DataVisualizer(csv_mgr=ft, x_col='timestamp', y_col='idle')
     ft.forecast(compare_data=test_visualize, column_list=['timestamp', 'idle'])
 
 
+def forecast(seq, test_data, datacol, time_col, future):
+    """
+    Forecast the datacol for future number of steps
+    :param seq: Trained model object of Seq2seq class
+    :param test_data: CsvFIleManager object of test data
+    :param datacol: # column in test_data.data dataframe representing target data
+    :param time_col: # column in test_data.data dataframe representing target time
+    :param future: # steps in the future for forecast
+    :return:
+    """
+    test_size = test_data.data.shape(0)
+    test_target = test_data.data.iloc[0:(test_size-future), datacol]
+    criteria = nn.MSELoss()
+    with torch.no_grad():
+        pred = seq(test_target, future=future)
+        l_forecast = criteria(pred[:, future:], test_target[:, future:])
+        print('forecast loss:', l_forecast.item())
+    pred = torch.squeeze(pred)
+    pf1 = pd.DataFrame(pred[future:].cpu().numpy(), columns=['idle'])
+    test_visualize = pd.DataFrame(test_data.data.iloc[:, time_col], columns=['timestamp'])
+    pf1['timestamp'] = test_visualize.iloc[future:]
+    test_visualize.reset_index(drop=True, inplace=True)
+    test_target.reset_index(drop=True, inplace=True)
+    test_visualize['idle'] = test_target[:-1]
+    ft = DataVisualizer(csv_mgr=test_visualize, x_col='timestamp', y_col='idle')
+    ft.forecast(compare_data=pf1, column_list=['timestamp', 'idle'])
+
+
 if __name__ == '__main__':
     path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//CPU_STAT//CPU_STAT_06.csv'
-    csv_data_mgr = pre_train(path=path)
+    csv_data_mgr = pre_train(path=path, interval=1, get_by_interval=180)
     seq_length = 672
-    number_epochs = 1
+    number_epochs = 2
     number_hidden = 51
     number_cells = 3
     test_size = seq_length
-    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.8, data_col=9, time_col=2,
-                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells)
+    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.95, data_col=9, time_col=2,
+                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=1)
