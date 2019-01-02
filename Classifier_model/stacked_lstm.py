@@ -114,8 +114,8 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     :return: trained LSTM classifier
     """
     total_size = csv_data.data.shape[0]
-    train_size = math.floor(total_size*train_to_test)
-    train_size = math.floor(train_size/seq_l)*seq_l
+    train_size = math.floor(total_size * train_to_test)
+    train_size = math.floor(train_size / seq_l) * seq_l
     data = csv_data.data.iloc[:train_size + 1, data_col]
     iput = data.iloc[:-1]
     target = data.iloc[1:]
@@ -144,7 +144,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
         optimizer.step(closure)
         if (epoch + 1) % print_test_loss == 0:
             test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
-                 time_col=time_col, seq=seq, future=1)
+                 time_col=time_col, seq=seq, future=100)
     return seq
 
 
@@ -165,13 +165,14 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     if future >= test_size:
         raise RequirementNotSatisfied
     test_data = csv_data.data.iloc[train_size:train_size + test_size + 1, data_col]
-    test_visualize = pd.DataFrame(csv_data.data.iloc[train_size:train_size + test_size, time_col], columns=['timestamp'])
+    test_visualize = pd.DataFrame(csv_data.data.iloc[train_size:train_size + test_size, time_col],
+                                  columns=['timestamp'])
     test_visualize.reset_index(drop=True, inplace=True)
     test_data.reset_index(drop=True, inplace=True)
     test_iput = test_data[:-1]
     test_target = test_data[1:]
     # I am not convinced why test_size - 1, on perfect multiple train and test sizes this could break.
-    test_iput = torch.from_numpy(test_iput.values.reshape(-1, test_size - 1 ))
+    test_iput = torch.from_numpy(test_iput.values.reshape(-1, test_size - 1))
     test_target = torch.from_numpy(test_target.values.reshape(-1, test_size - 1))
     test_iput = test_iput.to(seq.device)
     test_target = test_target.to(seq.device)
@@ -186,33 +187,50 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     ft = CSVFileManager(interval=180, df=pf)
     test_visualize['idle'] = test_data[:-1]
     ft = DataVisualizer(csv_mgr=ft, x_col='timestamp', y_col='idle')
+    # Also note that when applying DataVisualizer.forecast, create the DataVisulaizer object of the original
+    # data and pass the predicted data as compare_data parameter to DataVisualizer.forecast() which is not obeyed below.
     ft.forecast(compare_data=test_visualize, column_list=['timestamp', 'idle'])
+    forecast(seq=seq, test_data=CSVFileManager(interval=180, df=csv_data.data.iloc[train_size:train_size +
+                                                                                              test_size + 1, :]),
+             time_col=time_col, data_col=data_col, future=future)
 
 
-def forecast(seq, test_data, datacol, time_col, future):
+def forecast(seq, test_data, data_col, time_col, future):
     """
     Forecast the datacol for future number of steps
     :param seq: Trained model object of Seq2seq class
     :param test_data: CsvFIleManager object of test data
-    :param datacol: # column in test_data.data dataframe representing target data
+    :param data_col: # column in test_data.data dataframe representing target data
     :param time_col: # column in test_data.data dataframe representing target time
     :param future: # steps in the future for forecast
     :return:
     """
-    test_size = test_data.data.shape(0)
-    test_target = test_data.data.iloc[0:(test_size-future), datacol]
+    # To do: there seems to be some caveats in there while slicing and selecting the data, also improve on the data
+    # plotting.Also note that when applying DataVisualizer.forecast, create the DataVisulaizer object of the original
+    # data and pass the predicted data as compare_data parameter to dataVisualizer.forecast()
+    total_size = test_data.data.shape[0]
+    test_iput = test_data.data.iloc[0:(total_size - future), data_col]
+    test_size = test_iput.size
+    test_target = test_data.data.iloc[:, data_col]
+    test_visualize = pd.DataFrame(test_data.data.iloc[:, time_col], columns=['timestamp'])
+    test_visualize.reset_index(drop=True, inplace=True)
+    test_iput.reset_index(drop=True, inplace=True)
+    test_iput = torch.from_numpy(test_iput.values.reshape(-1, test_size))
+    test_target = torch.from_numpy(test_target.values)
+    test_iput = test_iput.to(seq.device)
+    test_target = test_target.to(seq.device)
     criteria = nn.MSELoss()
     with torch.no_grad():
-        pred = seq(test_target, future=future)
-        l_forecast = criteria(pred[:, future:], test_target[:, future:])
+        pred = seq(test_iput, future=future)
+        pred = torch.squeeze(pred)
+        l_forecast = criteria(pred[test_size:test_size + future], test_target[test_size:test_size + future])
         print('forecast loss:', l_forecast.item())
-    pred = torch.squeeze(pred)
-    pf1 = pd.DataFrame(pred[future:].cpu().numpy(), columns=['idle'])
-    test_visualize = pd.DataFrame(test_data.data.iloc[:, time_col], columns=['timestamp'])
-    pf1['timestamp'] = test_visualize.iloc[future:]
-    test_visualize.reset_index(drop=True, inplace=True)
-    test_target.reset_index(drop=True, inplace=True)
-    test_visualize['idle'] = test_target[:-1]
+    pf1 = pd.DataFrame(pred[test_size:test_size + future].cpu().numpy(), columns=['idle'])
+    tmp = pd.DataFrame(test_visualize.iloc[test_size:test_size + future])
+    tmp.reset_index(drop=True, inplace=True)
+    pf1['timestamp'] = tmp[:]
+    test_visualize['idle'] = test_target[:]
+    test_visualize = CSVFileManager(interval=180, df=test_visualize)
     ft = DataVisualizer(csv_mgr=test_visualize, x_col='timestamp', y_col='idle')
     ft.forecast(compare_data=pf1, column_list=['timestamp', 'idle'])
 
