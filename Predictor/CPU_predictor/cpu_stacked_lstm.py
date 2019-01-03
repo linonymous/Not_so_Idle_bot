@@ -184,12 +184,10 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     pred = torch.squeeze(pred)
     pf = pd.DataFrame(pred[:-future].cpu().numpy(), columns=['idle'])
     pf['timestamp'] = test_visualize.iloc[:, 0]
-    ft = CSVFileManager(interval=180, df=pf)
     test_visualize['idle'] = test_data[:-1]
+    ft = CSVFileManager(interval=180, df=test_visualize)
     ft = DataVisualizer(csv_mgr=ft, x_col='timestamp', y_col='idle')
-    # Also note that when applying DataVisualizer.forecast, create the DataVisulaizer object of the original
-    # data and pass the predicted data as compare_data parameter to DataVisualizer.forecast() which is not obeyed below.
-    ft.forecast(compare_data=test_visualize, column_list=['timestamp', 'idle'])
+    ft.forecast(compare_data=pf, column_list=['timestamp', 'idle'])
     # Only giving test data to forecast the future results does not seem correct, and whole data should be first fed in
     # and then the future steps should be predicted, so it should rather be called from train; may be?
     # forecast(seq=seq, test_data=CSVFileManager(interval=180, df=csv_data.data.iloc[train_size:train_size +
@@ -199,7 +197,10 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
 
 def forecast(seq, test_data, data_col, time_col, future):
     """
-    Forecast the datacol for future number of steps
+    Forecast the datacol for future number of steps.
+    To do: there seems to be some caveats in there while slicing and selecting the data, also improve on the data
+    plotting.Also note that when applying DataVisualizer.forecast, create the DataVisualizer object of the original
+    data and pass the predicted data as compare_data parameter to dataVisualizer.forecast()
     :param seq: Trained model object of Seq2seq class
     :param test_data: CsvFIleManager object of test data
     :param data_col: # column in test_data.data dataframe representing target data
@@ -207,9 +208,6 @@ def forecast(seq, test_data, data_col, time_col, future):
     :param future: # steps in the future for forecast
     :return:
     """
-    # To do: there seems to be some caveats in there while slicing and selecting the data, also improve on the data
-    # plotting.Also note that when applying DataVisualizer.forecast, create the DataVisulaizer object of the original
-    # data and pass the predicted data as compare_data parameter to dataVisualizer.forecast()
     total_size = test_data.data.shape[0]
     test_iput = test_data.data.iloc[0:(total_size - future), data_col]
     test_size = test_iput.size
@@ -238,12 +236,12 @@ def forecast(seq, test_data, data_col, time_col, future):
 
 
 if __name__ == '__main__':
-    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//IO_STAT//IO_STAT-06.csv'
+    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//CPU_STAT//CPU_STAT_06.csv'
     csv_data_mgr = pre_train(path=path, interval=1, get_by_interval=180)
     seq_length = 672
     number_epochs = 200
     number_hidden = 51
     number_cells = 3
     test_size = seq_length
-    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=3, time_col=2,
-                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=200)
+    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=9, time_col=2,
+                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=1)
