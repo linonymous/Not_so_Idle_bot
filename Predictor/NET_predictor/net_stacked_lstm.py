@@ -10,7 +10,7 @@ from Dataset.data_visualization.DataVisualizer import DataVisualizer
 
 
 class Seq2seq(nn.Module):
-    def __init__(self, num_hidden, num_cells):
+    def __init__(self, num_hidden, num_cells, device=None):
         """
         Initialize the classifier
         :param num_hidden: Number of hidden units of LSTM
@@ -20,10 +20,16 @@ class Seq2seq(nn.Module):
         self.num_cells = num_cells
         self.num_hidden = num_hidden
         self.cell_list = []
-        if self.num_cells > 5 and self.num_hidden > 51:
-            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        if device == None:
+            if self.num_cells > 5 and self.num_hidden > 51:
+                self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            else:
+                self.device = "cpu"
         else:
-            self.device = "cpu"
+            if device == "gpu":
+                self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            else:
+                self.device = device
         for i in range(0, num_cells):
             if i == 0:
                 self.cell_list.append((nn.LSTMCell(1, num_hidden).double()).to(self.device))
@@ -98,11 +104,12 @@ def pre_train(path, dev, interval, get_by_interval):
     csv_mgr = CSVFileManager(filename=path, interval=interval)
     csv_mgr.data = csv_mgr.data.loc[csv_mgr.data['IFACE'] == dev]
     csv_mgr.data.reset_index(drop=True, inplace=True)
-    csv_mgr.get_by_interval(interval=get_by_interval)
+    if get_by_interval != interval:
+        csv_mgr.get_by_interval(interval=get_by_interval)
     return csv_mgr
 
 
-def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hidden, num_cells, print_test_loss=1):
+def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hidden, num_cells, device=None, print_test_loss=1):
     """
     train the classifier and print the training loss of the each epoch. Uses MSEloss as criteria
     :param csv_data: CSVFileManager object containing test data
@@ -113,6 +120,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     :param num_epochs: Number of training cycles
     :param num_hidden: Number of hidden units
     :param num_cells: Number of LSTM cells
+    :param device on which you want to run the classifier, can be "gpu" or "cpu"
     :param print_test_loss: Number of epochs after which testloss is evaluated
     :return: trained LSTM classifier
     """
@@ -124,7 +132,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     target = data.iloc[1:]
     iput = torch.from_numpy(iput.values.reshape(-1, seq_length))
     target = torch.from_numpy(target.values.reshape(-1, seq_length))
-    seq = Seq2seq(num_hidden=num_hidden, num_cells=num_cells)
+    seq = Seq2seq(num_hidden=num_hidden, num_cells=num_cells, device=device)
     seq.to(seq.device)
     seq.double()
     iput = iput.to(seq.device)
@@ -132,7 +140,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     iput.double()
     target.double()
     criteria = nn.MSELoss()
-    optimizer = optim.LBFGS(seq.parameters(), lr=0.1)
+    optimizer = optim.LBFGS(seq.parameters(), lr=1)
     for epoch in range(num_epochs):
         print('EPOCH: ', epoch)
 
@@ -160,7 +168,7 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     :param test_size: size of the test data for iloc
     :param data_col: # column of the target data in csv_data.data dataframe
     :param time_col: # column of the target timestamp in csv_data.data dataframe
-    :param seq: sequence length
+    :param seq: Trained model object of Seq2seq class
     :param future: number of future steps to be predicted, can not be greater than test_size as some part of test data
     would be used for future predictions
     :return:
@@ -242,11 +250,11 @@ def forecast(seq, test_data, data_col, time_col, future):
 
 if __name__ == '__main__':
     path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//NET_STAT//NET_STAT-06.csv'
-    csv_data_mgr = pre_train(path=path, dev="eth4", interval=1, get_by_interval=180)
+    csv_data_mgr = pre_train(path=path, dev="eth4", interval=1, get_by_interval=60)
     seq_length = 672
-    number_epochs = 200
+    number_epochs = 100
     number_hidden = 51
     number_cells = 3
     test_size = seq_length
-    #seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=3, time_col=2,
-    #            num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=200)
+    train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=6, time_col=2,
+          num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=100, device="gpu")
