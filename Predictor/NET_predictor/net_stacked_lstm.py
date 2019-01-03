@@ -84,10 +84,11 @@ class RequirementNotSatisfied(Error):
     pass
 
 
-def pre_train(path, interval, get_by_interval):
+def pre_train(path, dev, interval, get_by_interval):
     """
     Pre train work
     :param path: Complete path of the csv file for the data
+    :param dev: Network device to choose the data from the dataframe
     :param interval: interval in sec by which the data rows are separated in path csv
     :param get_by_interval: interval in sec by which csv data mgr will have data rows separated of the path csv
     :return: Return initialized CSVFileManager object
@@ -95,6 +96,8 @@ def pre_train(path, interval, get_by_interval):
     np.random.seed(0)
     torch.manual_seed(0)
     csv_mgr = CSVFileManager(filename=path, interval=interval)
+    csv_mgr.data = csv_mgr.data.loc[csv_mgr.data['IFACE'] == dev]
+    csv_mgr.data.reset_index(drop=True, inplace=True)
     csv_mgr.get_by_interval(interval=get_by_interval)
     return csv_mgr
 
@@ -238,12 +241,12 @@ def forecast(seq, test_data, data_col, time_col, future):
 
 
 if __name__ == '__main__':
-    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//IO_STAT//IO_STAT-06.csv'
-    csv_data_mgr = pre_train(path=path, interval=1, get_by_interval=180)
+    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//NET_STAT//NET_STAT-06.csv'
+    csv_data_mgr = pre_train(path=path, dev="eth4", interval=1, get_by_interval=180)
     seq_length = 672
     number_epochs = 200
     number_hidden = 51
     number_cells = 3
     test_size = seq_length
-    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=3, time_col=2,
-                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=200)
+    #seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=3, time_col=2,
+    #            num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=200)
