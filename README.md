@@ -1,2 +1,2 @@
 # Idle_bot
-Predicts idle time of compuatational resources.
+Predicts idle time of computational resources.
