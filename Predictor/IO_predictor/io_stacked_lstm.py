@@ -10,20 +10,27 @@ from Dataset.data_visualization.DataVisualizer import DataVisualizer
 
 
 class Seq2seq(nn.Module):
-    def __init__(self, num_hidden, num_cells):
+    def __init__(self, num_hidden, num_cells, device=None):
         """
         Initialize the classifier
         :param num_hidden: Number of hidden units of LSTM
         :param num_cells: Number of LSTM cells in the NN, equivalent to number of layers
+        :param device: device on which model will be trained, can be "cpu" or "gpu"
         """
         super(Seq2seq, self).__init__()
         self.num_cells = num_cells
         self.num_hidden = num_hidden
         self.cell_list = []
-        if self.num_cells > 5 and self.num_hidden > 51:
-            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        if device == None:
+            if self.num_cells > 5 and self.num_hidden > 51:
+                self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            else:
+                self.device = "cpu"
         else:
-            self.device = "cpu"
+            if device == "cpu":
+                self.device = "cpu"
+            else:
+                self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         for i in range(0, num_cells):
             if i == 0:
                 self.cell_list.append((nn.LSTMCell(1, num_hidden).double()).to(self.device))
@@ -99,7 +106,8 @@ def pre_train(path, interval, get_by_interval):
     return csv_mgr
 
 
-def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hidden, num_cells, print_test_loss=1):
+def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hidden, num_cells, lr, print_test_loss=1,
+          device=None):
     """
     train the classifier and print the training loss of the each epoch. Uses MSEloss as criteria
     :param csv_data: CSVFileManager object containing test data
@@ -107,10 +115,12 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     :param data_col: # column of the target data in csv_data.data dataframe
     :param time_col: # column of the target timestamp in csv_data.data dataframe
     :param seq_l: sequence length
-    :param num_epochs: Number of training cycles
-    :param num_hidden: Number of hidden units
-    :param num_cells: Number of LSTM cells
+    :param num_epochs: # of training cycles
+    :param num_hidden: # of hidden units
+    :param num_cells: # of LSTM cells
+    :param lr: learning rate used for optimizer
     :param print_test_loss: Number of epochs after which testloss is evaluated
+    :param device: device on which model would be trained, can be "gpu" or "cpu"
     :return: trained LSTM classifier
     """
     total_size = csv_data.data.shape[0]
@@ -121,7 +131,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     target = data.iloc[1:]
     iput = torch.from_numpy(iput.values.reshape(-1, seq_length))
     target = torch.from_numpy(target.values.reshape(-1, seq_length))
-    seq = Seq2seq(num_hidden=num_hidden, num_cells=num_cells)
+    seq = Seq2seq(num_hidden=num_hidden, num_cells=num_cells, device=device)
     seq.to(seq.device)
     seq.double()
     iput = iput.to(seq.device)
@@ -129,7 +139,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     iput.double()
     target.double()
     criteria = nn.MSELoss()
-    optimizer = optim.LBFGS(seq.parameters(), lr=0.1)
+    optimizer = optim.LBFGS(seq.parameters(), lr=lr)
     for epoch in range(num_epochs):
         print('EPOCH: ', epoch)
 
@@ -242,8 +252,10 @@ if __name__ == '__main__':
     csv_data_mgr = pre_train(path=path, interval=1, get_by_interval=180)
     seq_length = 672
     number_epochs = 200
-    number_hidden = 51
+    number_hidden = 101
     number_cells = 3
     test_size = seq_length
+    learning_rate = 0.1
     seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=3, time_col=2,
-                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=200)
+                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr = learning_rate,
+                print_test_loss=200)

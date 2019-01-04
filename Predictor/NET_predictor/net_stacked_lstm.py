@@ -109,7 +109,8 @@ def pre_train(path, dev, interval, get_by_interval):
     return csv_mgr
 
 
-def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hidden, num_cells, device=None, print_test_loss=1):
+def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hidden, num_cells, lr, device=None,
+          print_test_loss=1):
     """
     train the classifier and print the training loss of the each epoch. Uses MSEloss as criteria
     :param csv_data: CSVFileManager object containing test data
@@ -120,6 +121,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     :param num_epochs: Number of training cycles
     :param num_hidden: Number of hidden units
     :param num_cells: Number of LSTM cells
+    :param lr: Learning rate for the optimizer
     :param device on which you want to run the classifier, can be "gpu" or "cpu"
     :param print_test_loss: Number of epochs after which testloss is evaluated
     :return: trained LSTM classifier
@@ -140,7 +142,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     iput.double()
     target.double()
     criteria = nn.MSELoss()
-    optimizer = optim.LBFGS(seq.parameters(), lr=1)
+    optimizer = optim.LBFGS(seq.parameters(), lr=lr)
     for epoch in range(num_epochs):
         print('EPOCH: ', epoch)
 
@@ -255,6 +257,6 @@ if __name__ == '__main__':
     number_epochs = 100
     number_hidden = 51
     number_cells = 3
-    test_size = seq_length
-    train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=6, time_col=2,
-          num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, print_test_loss=100, device="gpu")
+    learning_rate = 1
+    train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=6, time_col=2, num_epochs=number_epochs,
+          num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate, print_test_loss=100, device="gpu")
