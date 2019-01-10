@@ -1,0 +1,6 @@
+
+26/12/2018
+Increasing the number of cells is not working, I mean it is reducing the performance of the classifier drastically, may be because it has to learn more parameters with increase in 
+number of cells, without increasing the data may reduce the performance as compared. It really is the difference between the test loss and train loss, if the difference between these 
+losses were not too much already increasing the number of cells may not help.
+Where as increasing number of hidden seems to work and decreases the loss drastically.
