@@ -2,17 +2,19 @@ import os
 import pandas as pd
 import numpy as np
 
-class CSVFileManager:
 
+class CSVFileManager:
     DELIMITER = ','
 
-    def __init__(self, filename, interval, df=None):
+    def __init__(self, interval, filename=None, df=None):
         """
         Manages CSV data, and would be used a s primary class while writing and reading the data
-        :param filename: csv file from where data would be read
-        :param interval: interval by which data is separated in sec
+        :param filename: string csv file to read the data
+        :param interval: integer interval by which data is separated in sec
         :param df: dataframe from which data would be loaded
         """
+        if filename is None and df is None:
+            raise RequiredParameterError()
         self.filename = filename
         self.data = None
         self.interval = interval
@@ -23,12 +25,11 @@ class CSVFileManager:
     def read_file(self):
         if self.filename is None:
             return
-        self.data = pd.read_csv(self.filename, delimiter=self.DELIMITER, index_col=None)
+        self.data = pd.read_csv(self.filename, delimiter=self.DELIMITER, index_col=None, encoding='utf-8')
 
     def write_file(self, filename=None):
         if filename is None:
-            print("Error:000 write target file is None")
-            return
+            raise RequiredParameterError()
         self.data.to_csv(filename, index=False)
 
     def delete_column(self, column_index=None):
@@ -37,19 +38,18 @@ class CSVFileManager:
 
     def delete_row(self, row_index=None):
         if row_index is None:
-            print("Error:001 index to delete row is None")
-            return
+            raise RequiredParameterError()
         self.data.drop(self.data.index[[row_index]])
 
     def get_by_interval(self, interval=1):
         """
-        Function separates self.data by given interval in sec, and updates self.data and self.interval
-        :param interval: interval by which data would be updated in data attribute of object in seconds, must be greater
+        Function separates self.data by given interval in sec, and updates self.data and self.interval to new values
+        :param interval:Integer interval by which data would be separated in sec in data of CSVFileManager, must be greater
          than self.interval
         :return: None
         """
         if self.interval > interval:
-            print(f'Error:002 Intervals can not be smaller than {self.interval}')
+            print('Error:002 Intervals can not be smaller than {}'.format(self.interval))
             return
         if self.interval == interval:
             return self.data
@@ -62,22 +62,38 @@ class CSVFileManager:
         self.data = tmp
         self.interval = interval
 
+
+class Error(Exception):
+    """
+   Base class for other exceptions
+   """
+    pass
+
+
+class RequiredParameterError(Error):
+    """
+   Raised required parameters are are not passed
+   """
+    pass
+
+
 def merge_csv_files(path, file_identifier=None, output_file=None, columns_to_drop=None):
     """
     Function to merge the files
     :param path: path to CSV files
     :param output_file: file name for output
     :param columns_to_drop: list of columns to drop
-    :param file_identifier: substring that matches the file names in path
+    :param file_identifier: substring that matches the file names in path e.g. "sec" or "min" for now
     :return: Merged Data frame
     """
 
     if path is None or output_file is None:
-        return None
+        raise RequiredParameterError()
     if file_identifier is None:
         file_identifier = '.'
 
-    file_objs = [CSVFileManager(path + filename, 60) for filename in os.listdir(path) if file_identifier in filename]
+    file_objs = [CSVFileManager(filename=path + filename, interval=60) for filename in os.listdir(path) if
+                 file_identifier in filename]
     merged_data = None
     for file_obj in file_objs:
         file_obj.read_file()
@@ -90,3 +106,8 @@ def merge_csv_files(path, file_identifier=None, output_file=None, columns_to_dro
     file_objs[0].data = merged_data
     file_objs[0].write_file(filename=output_file)
 
+
+if __name__ == '__main__':
+    merge_csv_files(path='C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//Sar//IO_STAT//AUG//',
+                    file_identifier="sec", output_file="C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//"
+                                                       "Dataset//data//IO_STAT//IO_STAT-08.csv")
