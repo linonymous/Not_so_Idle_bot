@@ -53,7 +53,7 @@ def calc_conf(deviation, tolerance, mape):
     :param mape: MAPE test error of predicted target
     :return: return the confidence
     """
-    return (1 - mape) * (1 - (deviation/tolerance)) * 100
+    return (1 - ((mape / 100) * (deviation/tolerance))) * 100
 
 
 class Selector:
@@ -61,7 +61,7 @@ class Selector:
         """
         Selector to select the optimal time for the execution of process based on predicted targets
         :param pred_target: list of predicted targets CSVFileManagers
-        :param MAPE_list: test MAPE list of all the targets
+        :param mape_list: test MAPE list of all the targets
         """
         self.pred_target = pred_target
         self.MAPE_list = mape_list
@@ -128,4 +128,5 @@ class Selector:
                 #  again the relative weights of targets
                 if (conf_sum/no_targets) > max_conf:
                     selected_time_start = i
+                    max_conf = (conf_sum/no_targets)
         return selected_time_start, max_conf
