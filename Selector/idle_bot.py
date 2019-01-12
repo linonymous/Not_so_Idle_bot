@@ -1,7 +1,4 @@
-from Dataset.data_handler.CSVFileManager import CSVFileManager
-from Dataset.data_visualization.DataVisualizer import DataVisualizer
 import math
-import numpy as np
 
 
 def calc_rmse(pred_target, val, time_slot_length):
@@ -41,7 +38,7 @@ def calc_tolerance(wt):
     :param wt: weight indication importance in selecting the time slot interval
     :return: return the tolerance from optimal value
     """
-    return 1-wt
+    return 1 - wt
 
 
 def calc_conf(deviation, tolerance, mape):
@@ -92,7 +89,7 @@ class Selector:
             min_val = self.pred_target[i].data.loc[:, 1].min()
             # Calculate list of rmses for particular target list pred_target[i].data, each value in rmse_list is rmse
             # of window of time slot length. This window is moved by one time interval each time till end of the target,
-            # therefore length of the rmse_list is pred_target[i].data - time_slot_length
+            # therefore length of the rmse_list is pred_target[i].data.length - time_slot_length
             rmse_list, deviation_list = calc_rmse(self.pred_target[i], min_val, time_slot_length)
 
             # Append individual rmse list of target to list of rmses and append deviation list to the list of deviations
@@ -115,7 +112,8 @@ class Selector:
             for j in range(0, no_targets):
                 if deviation_list_list[j][i] > tolerance_list[j]:
                     break
-                flg = 1
+                if j + 1 == no_targets:
+                    flg = 1
 
             # Calculate the confidence
             conf_sum = 0
@@ -123,8 +121,8 @@ class Selector:
                 for j in range(0, no_targets):
                     conf = calc_conf(deviation_list_list[j][i], tolerance_list[j], self.MAPE_list[j])
                     conf_sum += conf
-                # We take mean confidence in account, I think we already have taken care of the weights in the
-                # calculating the individual confidence, so taking mean should not be biased and should not into account
+                # We take mean confidence in account, I think we already have taken care of the weights in
+                # calculating the individual confidence, so taking mean should not be biased and should not account
                 #  again the relative weights of targets
                 if (conf_sum/no_targets) > max_conf:
                     selected_time_start = i
