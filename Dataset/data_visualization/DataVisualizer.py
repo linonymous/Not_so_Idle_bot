@@ -39,7 +39,7 @@ class DataVisualizer:
     def y_col(self, y_col):
         self.__y_col = y_col
 
-    def forecast(self, compare_data=None, column_list=None, file_path=None):
+    def forecast(self, compare_data=None, column_list=None, file_path=None, show=0):
         """
         Forecast the data using matplotlib.pyplot
         :param compare_data: Dataframe for the data which needs to be \
@@ -69,9 +69,9 @@ class DataVisualizer:
             plt.plot(x_cp, y_cp, 'b')
 
         # plt.xticks(range(len(x)), x, rotation='vertical')
-        if file_path == None:
+        if show == 1:
             plt.show()
-        else:
+        if file_path != None:
             plt.savefig(file_path, figsize=(10, 10), dpi=100)
 
 
@@ -90,4 +90,4 @@ if __name__ == "__main__":
     pf1 = pf1.iloc[1:3, :]
     print(pf1)
     dv = DataVisualizer(csv_mgr=csv_mgr, x_col='B', y_col='A')
-    dv.forecast(compare_data=pf1, column_list=['B', 'A'], file_path="C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//e.png")
+    dv.forecast(compare_data=pf1, column_list=['B', 'A'], file_path="C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//d.png")

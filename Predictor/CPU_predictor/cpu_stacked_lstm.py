@@ -177,13 +177,16 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
             return l_train
 
         optimizer.step(closure)
-        if (epoch + 1) % print_test_loss == 0:
+        if (epoch + 1) == print_test_loss:
             test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
-                 time_col=time_col, seq=seq, future=future, result_file=result_file_path)
+                 time_col=time_col, seq=seq, future=future, result_file=result_file_path, show=1)
+        elif (epoch + 1) % print_test_loss == 0:
+            test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
+                 time_col=time_col, seq=seq, future=future, result_file=None, show=0)
     return seq
 
 
-def test(csv_data, train_size, test_size, data_col, time_col, seq, future, result_file=None):
+def test(csv_data, train_size, test_size, data_col, time_col, seq, future, result_file=None, show=0):
     """
     test the the classifier and visualizes the predicted and actual values, does not print the visualization of
     the future. Uses MSEloss as criteria
@@ -196,6 +199,7 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future, resul
     :param future: number of future steps to be predicted, can not be greater than test_size as some part of test data
     would be used for future predictions
     :param result_file: a complete file path where the results would be stored after testing
+    :param Whether to show the graph, **NOTE** : requires you to close the graph to continue the result
     :return:
     """
     if future >= test_size:
@@ -226,7 +230,7 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future, resul
     test_visualize['idle'] = test_data[:-1]
     ft = CSVFileManager(interval=180, df=test_visualize)
     ft = DataVisualizer(csv_mgr=ft, x_col='timestamp', y_col='idle')
-    ft.forecast(compare_data=pf, column_list=['timestamp', 'idle'], file_path=result_file)
+    ft.forecast(compare_data=pf, column_list=['timestamp', 'idle'], file_path=result_file, show=show)
     # Only giving test data to forecast the future results does not seem correct, and whole data should be first fed in
     # and then the future steps should be predicted, so it should rather be called from train; may be?
     # forecast(seq=seq, test_data=CSVFileManager(interval=180, df=csv_data.data.iloc[train_size:train_size +
@@ -286,4 +290,4 @@ if __name__ == '__main__':
     learning_rate = 0.1
     seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=9, time_col=2,
                 num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
-                print_test_loss=100)
+                print_test_loss=1)
