@@ -118,7 +118,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     :param num_hidden: Number of hidden units
     :param num_cells: Number of LSTM cells
     :param lr: learning rate of optimizer
-    :param print_test_loss: Number of epochs after which testloss is evaluated
+    :param print_test_loss: Number of epochs after which test loss is evaluated
     :param: device: device on which the model is trained, can be "cpu" or "gpu"
     :return: trained LSTM classifier
     """
@@ -157,6 +157,21 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     return seq
 
 
+def calc_mape(pred, actual):
+    """
+    Calculate the Mean absolute percentage error
+    :param pred: predicted data frame
+    :param actual: actual data frame
+    :return: returns positive real number; % error
+    """
+    pred_length = pred.length
+    error_sum = 0
+    for i in range(0, pred_length):
+        if pred[i] != 0:
+            error_sum += abs((pred[i] - actual[i]) / actual[i])
+    return error_sum / pred_length
+
+
 def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     """
     test the the classifier and visualizes the predicted and actual values, does not print the visualization of
@@ -188,9 +203,11 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     criteria = nn.MSELoss()
     with torch.no_grad():
         pred = seq(test_iput, future=future)
+        # Number of futures would be added in the prediction, thats why we pass whole test_data
         l_test = criteria(pred[:, :-future], test_target)
         print('test loss:', l_test.item())
     pred = torch.squeeze(pred)
+    calc_mape(pred[:, :-future], test_data)
     pf = pd.DataFrame(pred[:-future].cpu().numpy(), columns=['idle'])
     pf['timestamp'] = test_visualize.iloc[:, 0]
     test_visualize['idle'] = test_data[:-1]
@@ -208,7 +225,7 @@ def forecast(seq, test_data, data_col, time_col, future):
     """
     Forecast the datacol for future number of steps.
     To do: there seems to be some caveats in there while slicing and selecting the data, also improve on the data
-    plotting.Also note that when applying DataVisualizer.forecast, create the DataVisualizer object of the original
+    plotting. Also note that when applying DataVisualizer.forecast, create the DataVisualizer object of the original
     data and pass the predicted data as compare_data parameter to dataVisualizer.forecast()
     :param seq: Trained model object of Seq2seq class
     :param test_data: CsvFIleManager object of test data
