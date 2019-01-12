@@ -159,17 +159,23 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
 
 def calc_mape(pred, actual):
     """
-    Calculate the Mean absolute percentage error
+    Calculate the Mean absolute percentage error; Note: There are errors in MAPE, like MAPE is undefined when actual data
+    is zero, so below implementation is WAPE(weighted absolute percentage error) which does not seem correctly calculate
+    the performance, perhaps it has been seen that there is no any ultimate correct performance measure and literati in
+    statistics tend to use multiple error paradigms. Below implementation is subjected to change as we define more error
+    paradigms
+
     :param pred: predicted data frame
     :param actual: actual data frame
     :return: returns positive real number; % error
     """
-    pred_length = pred.length
-    error_sum = 0
+    pred_length = pred.size
+    sum_deviation = 0
+    sum_actual = 0
     for i in range(0, pred_length):
-        if pred[i] != 0:
-            error_sum += abs((pred[i] - actual[i]) / actual[i])
-    return error_sum / pred_length
+        sum_deviation += abs(pred[i] - actual[i])
+        sum_actual += pred[i]
+    return (sum_deviation / sum_actual) * 100
 
 
 def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
@@ -206,8 +212,9 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
         # Number of futures would be added in the prediction, thats why we pass whole test_data
         l_test = criteria(pred[:, :-future], test_target)
         print('test loss:', l_test.item())
+    mape = calc_mape(pd.DataFrame(pred[:, :-future].cpu().numpy()), test_data)
+    print("Weighted mean absolute error is :", mape)
     pred = torch.squeeze(pred)
-    calc_mape(pred[:, :-future], test_data)
     pf = pd.DataFrame(pred[:-future].cpu().numpy(), columns=['idle'])
     pf['timestamp'] = test_visualize.iloc[:, 0]
     test_visualize['idle'] = test_data[:-1]
@@ -265,11 +272,11 @@ if __name__ == '__main__':
     path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//CPU_STAT//CPU_STAT_06.csv'
     csv_data_mgr = pre_train(path=path, interval=1, get_by_interval=180)
     seq_length = 672
-    number_epochs = 200
+    number_epochs = 10
     number_hidden = 51
     number_cells = 3
     test_size = seq_length
     learning_rate = 0.1
     seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=9, time_col=2,
                 num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
-                print_test_loss=1)
+                print_test_loss=100)
