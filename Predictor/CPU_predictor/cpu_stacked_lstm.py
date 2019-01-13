@@ -7,7 +7,8 @@ import torch.nn as nn
 import math
 from Dataset.data_handler.CSVFileManager import CSVFileManager
 from Dataset.data_visualization.DataVisualizer import DataVisualizer
-
+import pickle
+import csv
 
 class Seq2seq(nn.Module):
     def __init__(self, num_hidden, num_cells, device=None):
@@ -108,7 +109,8 @@ def calc_mape(pred, actual):
     for i in range(0, pred_length):
         sum_deviation += abs(pred[i] - actual[i])
         sum_actual += pred[i]
-    return (sum_deviation / sum_actual) * 100
+    o = (sum_deviation / sum_actual) * 100
+    return o.tolist()[0]
 
 
 def pre_train(path, interval, get_by_interval):
@@ -143,10 +145,10 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     :param device: device on which the model is trained, can be "cpu" or "gpu"
     :return: trained LSTM classifier
     """
-    result_file_path = "C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Predictor//CPU_predictor//Results//"
+    result_file_path = "C:\\Users\\Swapnil Walke\\PycharmProjects\\data\\CPU_STAT"
     future = 500
-    file_name = "c" + str(number_cells) + "h" + str(number_hidden) + "e" + str(num_epochs) + "f" + str(future) \
-                + "seq" + str(seq_length) + ".png"
+    file_name = "c" + str(num_cells) + "h" + str(num_hidden) + "e" + str(num_epochs) + "f" + str(future) \
+                + "seq" + str(seq_l) + ".png"
     result_file_path = result_file_path + file_name
     total_size = csv_data.data.shape[0]
     train_size = math.floor(total_size * train_to_test)
@@ -154,8 +156,8 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     data = csv_data.data.iloc[:train_size + 1, data_col]
     iput = data.iloc[:-1]
     target = data.iloc[1:]
-    iput = torch.from_numpy(iput.values.reshape(-1, seq_length))
-    target = torch.from_numpy(target.values.reshape(-1, seq_length))
+    iput = torch.from_numpy(iput.values.reshape(-1, seq_l))
+    target = torch.from_numpy(target.values.reshape(-1, seq_l))
     seq = Seq2seq(num_hidden=num_hidden, num_cells=num_cells, device=device)
     seq.to(seq.device)
     seq.double()
@@ -164,26 +166,36 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     iput.double()
     target.double()
     criteria = nn.MSELoss()
+    test_mape, test_loss = None, None
     optimizer = optim.LBFGS(seq.parameters(), lr=lr)
+    pkle_file = result_file_path + "tr_loss"
     for epoch in range(num_epochs):
         print('EPOCH: ', epoch)
+        tr_loss = None
 
         def closure():
+            global tr_loss
             optimizer.zero_grad()
             out = seq(iput)
             l_train = criteria(out, target)
-            print('loss:', l_train.item())
+            tr_loss = l_train.item()
+            print('loss:', tr_loss)
+            with open(pkle_file, 'wb') as file:
+                pickle.dump(tr_loss, file)
             l_train.backward()
             return l_train
 
         optimizer.step(closure)
-        if (epoch + 1) == number_epochs:
-            test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
-                 time_col=time_col, seq=seq, future=future, result_file=result_file_path, show=1)
+        with open(pkle_file, 'rb') as file:
+            tr_loss = pickle.load(file)
+        print(tr_loss)
+        if (epoch + 1) == num_epochs:
+            test_mape, test_loss = test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size,\
+            data_col=data_col, time_col=time_col, seq=seq, future=future, result_file=result_file_path, show=0)
         elif (epoch + 1) % print_test_loss == 0:
-            test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
-                 time_col=time_col, seq=seq, future=future, result_file=None, show=0)
-    return seq
+            test_mape, test_loss = test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size,\
+            data_col=data_col, time_col=time_col, seq=seq, future=future, result_file=None, show=0)
+    return seq, tr_loss, test_mape, test_loss
 
 
 def test(csv_data, train_size, test_size, data_col, time_col, seq, future, result_file=None, show=0):
@@ -231,6 +243,7 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future, resul
     ft = CSVFileManager(interval=180, df=test_visualize)
     ft = DataVisualizer(csv_mgr=ft, x_col='timestamp', y_col='idle')
     ft.forecast(compare_data=pf, column_list=['timestamp', 'idle'], file_path=result_file, show=show)
+    return mape, l_test.item()
     # Only giving test data to forecast the future results does not seem correct, and whole data should be first fed in
     # and then the future steps should be predicted, so it should rather be called from train; may be?
     # forecast(seq=seq, test_data=CSVFileManager(interval=180, df=csv_data.data.iloc[train_size:train_size +
@@ -280,14 +293,35 @@ def forecast(seq, test_data, data_col, time_col, future, result_file=None):
 
 
 if __name__ == '__main__':
-    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//CPU_STAT//CPU_STAT_06.csv'
+    path = 'C:\\Users\\Swapnil Walke\\PycharmProjects\\data\\CPU_STAT\\CPU_STAT_06.csv'
     csv_data_mgr = pre_train(path=path, interval=1, get_by_interval=180)
-    seq_length = 672
-    number_epochs = 10
+    # seq_length = 672
+    # number_epochs = 1
+    # number_hidden = 51
+    # number_cells = 3
+    # test_size = seq_length
+    # learning_rate = 0.1
+    # seq, tr_loss, test_mape, test_loss = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=9, time_col=2,
+    #             num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
+    #             print_test_loss=1, device="gpu")
+    import csv
     number_hidden = 51
     number_cells = 3
-    test_size = seq_length
     learning_rate = 0.1
-    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=9, time_col=2,
-                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
-                print_test_loss=1)
+    csv_file = 'C:\\Users\\Swapnil Walke\\PycharmProjects\\Idle_bot\\result'
+    header = ["epochs", "seq_l", "num_cells", "num_hidden", "train_loss", "test_loss", "mape"]
+    rows = list()
+    rows.append(header)
+    epoch_list = [100, 120, 140, 160, 180, 200, 220]
+    seq_list = [200, 300, 400, 500, 600, 700]
+    for epoch in epoch_list:
+        for seq_l in seq_list:
+            test_size = seq_l
+            model, train_loss, test_mape, test_loss = train(csv_data=csv_data_mgr, seq_l=seq_l, train_to_test=0.9,\
+                data_col=9, time_col=2, num_epochs=epoch, num_hidden=number_hidden, num_cells=number_cells,\
+                print_test_loss=1, lr=learning_rate)
+            rows.append([epoch, seq_l, number_cells, number_hidden, train_loss, test_loss, test_mape])
+    with open(csv_file + ".csv", 'w') as file:
+        writer = csv.writer(file)
+        writer.writerows(rows)
+    file.close()
