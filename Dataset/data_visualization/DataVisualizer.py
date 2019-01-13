@@ -39,15 +39,17 @@ class DataVisualizer:
     def y_col(self, y_col):
         self.__y_col = y_col
 
-    def forecast(self, compare_data=None, column_list=None):
+    def forecast(self, compare_data=None, column_list=None, file_path=None, show=0):
         """
         Forecast the data using matplotlib.pyplot
         :param compare_data: Dataframe for the data which needs to be \
                             plotted for comparision
         :param column_list: List of two elements indicating \
                             two columns participating in comparison
+        :param file_path: result file path
         :return: None
         """
+        plt.figure(figsize=(18.0, 10.0))
         if self.__x_col is None or self.__y_col is None:
             print("ERROR: Please update the values for x_col and y_col.")
             return None
@@ -65,8 +67,12 @@ class DataVisualizer:
             x_cp = compare_data[column_list[0]].tolist()
             y_cp = compare_data[column_list[1]].tolist()
             plt.plot(x_cp, y_cp, 'b')
-        #plt.xticks(range(len(x)), x, rotation='vertical')
-        plt.show()
+
+        # plt.xticks(range(len(x)), x, rotation='vertical')
+        if show == 1:
+            plt.show()
+        if file_path != None:
+            plt.savefig(file_path, figsize=(10, 10), dpi=100)
 
 
 if __name__ == "__main__":
@@ -84,4 +90,4 @@ if __name__ == "__main__":
     pf1 = pf1.iloc[1:3, :]
     print(pf1)
     dv = DataVisualizer(csv_mgr=csv_mgr, x_col='B', y_col='A')
-    dv.forecast(compare_data=pf1, column_list=['B', 'A'])
+    dv.forecast(compare_data=pf1, column_list=['B', 'A'], file_path="C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//d.png")

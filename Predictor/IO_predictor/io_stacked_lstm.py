@@ -15,7 +15,6 @@ class Seq2seq(nn.Module):
         Initialize the classifier
         :param num_hidden: Number of hidden units of LSTM
         :param num_cells: Number of LSTM cells in the NN, equivalent to number of layers
-        :param device: device on which model will be trained, can be "cpu" or "gpu"
         """
         super(Seq2seq, self).__init__()
         self.num_cells = num_cells
@@ -27,10 +26,10 @@ class Seq2seq(nn.Module):
             else:
                 self.device = "cpu"
         else:
-            if device == "cpu":
-                self.device = "cpu"
-            else:
+            if device == "gpu":
                 self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            else:
+                self.device = "cpu"
         for i in range(0, num_cells):
             if i == 0:
                 self.cell_list.append((nn.LSTMCell(1, num_hidden).double()).to(self.device))
@@ -91,6 +90,27 @@ class RequirementNotSatisfied(Error):
     pass
 
 
+def calc_mape(pred, actual):
+    """
+    Calculate the Mean absolute percentage error; Note: There are errors in MAPE, like MAPE is undefined when actual data
+    is zero, so below implementation is WAPE(weighted absolute percentage error) which does not seem correctly calculate
+    the performance, perhaps it has been seen that there is no any ultimate correct performance measure and literati in
+    statistics tend to use multiple error paradigms. Below implementation is subjected to change as we define more error
+    paradigms
+
+    :param pred: predicted data frame
+    :param actual: actual data frame
+    :return: returns positive real number; % error
+    """
+    pred_length = pred.size
+    sum_deviation = 0
+    sum_actual = 0
+    for i in range(0, pred_length):
+        sum_deviation += abs(pred[i] - actual[i])
+        sum_actual += pred[i]
+    return (sum_deviation / sum_actual) * 100
+
+
 def pre_train(path, interval, get_by_interval):
     """
     Pre train work
@@ -115,14 +135,19 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
     :param data_col: # column of the target data in csv_data.data dataframe
     :param time_col: # column of the target timestamp in csv_data.data dataframe
     :param seq_l: sequence length
-    :param num_epochs: # of training cycles
-    :param num_hidden: # of hidden units
-    :param num_cells: # of LSTM cells
-    :param lr: learning rate used for optimizer
-    :param print_test_loss: Number of epochs after which testloss is evaluated
-    :param device: device on which model would be trained, can be "gpu" or "cpu"
+    :param num_epochs: Number of training cycles
+    :param num_hidden: Number of hidden units
+    :param num_cells: Number of LSTM cells
+    :param lr: learning rate of optimizer
+    :param print_test_loss: Number of epochs after which test loss is evaluated
+    :param device: device on which the model is trained, can be "cpu" or "gpu"
     :return: trained LSTM classifier
     """
+    result_file_path = "C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Predictor//CPU_predictor//Results//"
+    future = 500
+    file_name = "c" + str(number_cells) + "h" + str(number_hidden) + "e" + str(num_epochs) + "f" + str(future) \
+                + "seq" + str(seq_length) + ".png"
+    result_file_path = result_file_path + file_name
     total_size = csv_data.data.shape[0]
     train_size = math.floor(total_size * train_to_test)
     train_size = math.floor(train_size / seq_l) * seq_l
@@ -152,13 +177,16 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
             return l_train
 
         optimizer.step(closure)
-        if (epoch + 1) % print_test_loss == 0:
+        if (epoch + 1) == print_test_loss:
             test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
-                 time_col=time_col, seq=seq, future=500)
+                 time_col=time_col, seq=seq, future=future, result_file=result_file_path, show=1)
+        elif (epoch + 1) % print_test_loss == 0:
+            test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
+                 time_col=time_col, seq=seq, future=future, result_file=None, show=0)
     return seq
 
 
-def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
+def test(csv_data, train_size, test_size, data_col, time_col, seq, future, result_file=None, show=0):
     """
     test the the classifier and visualizes the predicted and actual values, does not print the visualization of
     the future. Uses MSEloss as criteria
@@ -170,6 +198,8 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     :param seq: sequence length
     :param future: number of future steps to be predicted, can not be greater than test_size as some part of test data
     would be used for future predictions
+    :param result_file: a complete file path where the results would be stored after testing
+    :param show: Whether to show the graph, **NOTE** : requires you to close the graph to continue the result
     :return:
     """
     if future >= test_size:
@@ -189,17 +219,18 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     criteria = nn.MSELoss()
     with torch.no_grad():
         pred = seq(test_iput, future=future)
+        # Number of futures would be added in the prediction, thats why we pass whole test_data
         l_test = criteria(pred[:, :-future], test_target)
         print('test loss:', l_test.item())
+    mape = calc_mape(pd.DataFrame(pred[:, :-future].cpu().numpy()), test_data)
+    print("Weighted mean absolute error is :", mape)
     pred = torch.squeeze(pred)
     pf = pd.DataFrame(pred[:-future].cpu().numpy(), columns=['idle'])
     pf['timestamp'] = test_visualize.iloc[:, 0]
-    ft = CSVFileManager(interval=180, df=pf)
     test_visualize['idle'] = test_data[:-1]
+    ft = CSVFileManager(interval=180, df=test_visualize)
     ft = DataVisualizer(csv_mgr=ft, x_col='timestamp', y_col='idle')
-    # Also note that when applying DataVisualizer.forecast, create the DataVisulaizer object of the original
-    # data and pass the predicted data as compare_data parameter to DataVisualizer.forecast() which is not obeyed below.
-    ft.forecast(compare_data=test_visualize, column_list=['timestamp', 'idle'])
+    ft.forecast(compare_data=pf, column_list=['timestamp', 'idle'], file_path=result_file, show=show)
     # Only giving test data to forecast the future results does not seem correct, and whole data should be first fed in
     # and then the future steps should be predicted, so it should rather be called from train; may be?
     # forecast(seq=seq, test_data=CSVFileManager(interval=180, df=csv_data.data.iloc[train_size:train_size +
@@ -207,19 +238,20 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future):
     #         time_col=time_col, data_col=data_col, future=future)
 
 
-def forecast(seq, test_data, data_col, time_col, future):
+def forecast(seq, test_data, data_col, time_col, future, result_file=None):
     """
-    Forecast the datacol for future number of steps
+    Forecast the datacol for future number of steps.
+    To do: there seems to be some caveats in there while slicing and selecting the data, also improve on the data
+    plotting. Also note that when applying DataVisualizer.forecast, create the DataVisualizer object of the original
+    data and pass the predicted data as compare_data parameter to dataVisualizer.forecast()
     :param seq: Trained model object of Seq2seq class
     :param test_data: CsvFIleManager object of test data
     :param data_col: # column in test_data.data dataframe representing target data
     :param time_col: # column in test_data.data dataframe representing target time
     :param future: # steps in the future for forecast
+    :param result_file: result file path to save forecast
     :return:
     """
-    # To do: there seems to be some caveats in there while slicing and selecting the data, also improve on the data
-    # plotting.Also note that when applying DataVisualizer.forecast, create the DataVisulaizer object of the original
-    # data and pass the predicted data as compare_data parameter to dataVisualizer.forecast()
     total_size = test_data.data.shape[0]
     test_iput = test_data.data.iloc[0:(total_size - future), data_col]
     test_size = test_iput.size
@@ -244,18 +276,18 @@ def forecast(seq, test_data, data_col, time_col, future):
     test_visualize['idle'] = test_target[:]
     test_visualize = CSVFileManager(interval=180, df=test_visualize)
     ft = DataVisualizer(csv_mgr=test_visualize, x_col='timestamp', y_col='idle')
-    ft.forecast(compare_data=pf1, column_list=['timestamp', 'idle'])
+    ft.forecast(compare_data=pf1, column_list=['timestamp', 'idle'], file_path=result_file)
 
 
 if __name__ == '__main__':
-    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//IO_STAT//IO_STAT-06.csv'
+    path = 'C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Dataset//data//IO_STAT//IO_STAT_06.csv'
     csv_data_mgr = pre_train(path=path, interval=1, get_by_interval=180)
     seq_length = 672
-    number_epochs = 200
-    number_hidden = 101
+    number_epochs = 10
+    number_hidden = 51
     number_cells = 3
     test_size = seq_length
     learning_rate = 0.1
     seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=3, time_col=2,
-                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr = learning_rate,
-                print_test_loss=200)
+                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
+                print_test_loss=1)
