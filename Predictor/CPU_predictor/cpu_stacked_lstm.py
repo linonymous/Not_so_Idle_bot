@@ -327,67 +327,90 @@ def forecast(seq, test_data, data_col, time_col, future, result_file=None):
 if __name__ == '__main__':
     path = 'C:\\Users\\Swapnil Walke\\PycharmProjects\\data\\CPU_STAT\\CPU_STAT_06.csv'
     csv_data_mgr = pre_train(path=path, interval=1, get_by_interval=180)
-    # seq_length = 672
-    # number_epochs = 1
-    # number_hidden = 51
-    # number_cells = 3
-    # test_size = seq_length
-    # learning_rate = 0.1
+    number_hidden = 51
+    number_cells = 3
+    learning_rate = 0.1
+    train_to_test = 0.9
+    data_col = 9
+    time_col = 2
+    device = "gpu"
     # seq, tr_loss, test_mape, test_loss = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=0.9, data_col=9, time_col=2,
     #             num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
     #             print_test_loss=1, device="gpu")
     import csv
-    csv_file = 'C:\\Users\\Swapnil Walke\\PycharmProjects\\Idle_bot\\result'
+    result = 'C:\\Users\\Swapnil Walke\\PycharmProjects\\Idle_bot\\result\\'
     header = ["epochs", "seq_l", "num_cells", "num_hidden", "train_loss", "test_loss", "mape"]
     rows = list()
     rows.append(header)
-    epoch_list = [100, 120, 140, 160, 180, 200, 220]
-    seq_list = [200, 300, 400, 500, 600, 700]
+    epoch_list = [10, 20]
+    seq_list = [100, 200]
+    # epoch_list = [100, 120, 140, 160, 180, 200, 220]
+    # seq_list = [200, 300, 400, 500, 600, 700]
     for epoch in epoch_list:
         for seq_l in seq_list:
             test_size = seq_l
-            model, train_loss, test_mape, test_loss = train(csv_data=csv_data_mgr, seq_l=seq_l, train_to_test=0.9,\
-                data_col=9, time_col=2, num_epochs=epoch, num_hidden=number_hidden, num_cells=number_cells,\
-                print_test_loss=1, lr=learning_rate)
+            # train the model
+            model, train_loss, test_mape, test_loss = train(csv_data=csv_data_mgr, seq_l=seq_l,
+                                                            train_to_test=train_to_test,
+                                                            data_col=data_col,
+                                                            time_col=time_col,
+                                                            num_epochs=epoch,
+                                                            num_hidden=number_hidden,
+                                                            num_cells=number_cells,
+                                                            print_test_loss=1,
+                                                            lr=learning_rate,
+                                                            device=device)
+
+            # create a row to keep them in result.csv
             rows.append([epoch, seq_l, number_cells, number_hidden, train_loss, test_loss, test_mape])
-    with open(csv_file + ".csv", 'w') as file:
+
+            # save the model
+            file_name = "c" + str(number_cells) + "h" + str(number_hidden) + "e" + str(epoch) \
+                        + "seq" + str(seq_l) + ".pth.tar"
+
+            save_checkpoints({
+                'num_epochs': epoch,
+                'num_hidden': number_hidden,
+                'num_cells': number_cells,
+                'device': device,
+                'seq_length': seq_l,
+                'state_dict': model.state_dict()}, result + file_name)
+    with open(result + "result.csv", 'w') as file:
         writer = csv.writer(file)
         writer.writerows(rows)
     file.close()
-    train_to_test = 0.9
-    data_col = 9
-    time_col = 2
-    device = None
-    print_test_loss = 1
-    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=train_to_test, data_col=data_col, time_col=time_col,
-                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
-                print_test_loss=print_test_loss)
 
+    # print_test_loss = 1
+    # seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=train_to_test, data_col=data_col, time_col=time_col,
+    #             num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
+    #             print_test_loss=print_test_loss)
+    #
     # Example to save and reload the trained model, which then tested against test data
     # With below saving methos we can not resume the training, to resume the training you would need to save the
     # optimizer
-    result_file_path = "C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Predictor//CPU_predictor//Results//"
-    file_name = "c" + str(number_cells) + "h" + str(number_hidden) + "e" + str(number_epochs) \
-                + "seq" + str(seq_length) + ".pth.tar"
-    result_file_path = result_file_path + file_name
-    save_checkpoints({
-        'num_epochs': number_epochs,
-        'num_hidden': number_hidden,
-        'num_cells': number_cells,
-        'device': device,
-        'state_dict': seq.state_dict()}, result_file_path)
-
+    # result_file_path = "C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Predictor//CPU_predictor//Results//"
+    # file_name = "c" + str(number_cells) + "h" + str(number_hidden) + "e" + str(number_epochs) \
+    #             + "seq" + str(seq_length) + ".pth.tar"
+    # result_file_path = result_file_path + file_name
+    # save_checkpoints({
+    #     'num_epochs': number_epochs,
+    #     'num_hidden': number_hidden,
+    #     'num_cells': number_cells,
+    #     'device': device,
+    #     'seq_length' : seq_l,
+    #     'state_dict': seq.state_dict()}, result_file_path)
+    #
     # csv_data is the CSV_FileManager on which you want to run the testing
-    total_size = csv_data_mgr.data.shape[0]
-    train_size = math.floor(total_size * train_to_test)
-    train_size = math.floor(train_size / seq_length) * seq_length
-    test_size = total_size - train_size
-
+    # total_size = csv_data_mgr.data.shape[0]
+    # train_size = math.floor(total_size * train_to_test)
+    # train_size = math.floor(train_size / seq_length) * seq_length
+    # test_size = total_size - train_size
+    #
     # Give the checkpoint file name to read the values from
-    seq = load_checkpoints(file_name)
-    seq.to(seq.device)
-    seq.double()
-
-    #test on loaded model
-    test(csv_data=csv_data_mgr, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
-         time_col=time_col, seq=seq, future=100, result_file=None, show=0)
+    # seq = load_checkpoints(file_name)
+    # seq.to(seq.device)
+    # seq.double()
+    #
+    # test on loaded model
+    # test(csv_data=csv_data_mgr, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
+    #      time_col=time_col, seq=seq, future=100, result_file=None, show=0)
