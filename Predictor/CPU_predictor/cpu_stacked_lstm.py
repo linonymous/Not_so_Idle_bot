@@ -177,7 +177,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
             return l_train
 
         optimizer.step(closure)
-        if (epoch + 1) == print_test_loss:
+        if (epoch + 1) == number_epochs:
             test(csv_data=csv_data, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
                  time_col=time_col, seq=seq, future=future, result_file=result_file_path, show=1)
         elif (epoch + 1) % print_test_loss == 0:
@@ -199,7 +199,7 @@ def test(csv_data, train_size, test_size, data_col, time_col, seq, future, resul
     :param future: number of future steps to be predicted, can not be greater than test_size as some part of test data
     would be used for future predictions
     :param result_file: a complete file path where the results would be stored after testing
-    :param Whether to show the graph, **NOTE** : requires you to close the graph to continue the result
+    :param show: Whether to show the graph, **NOTE** : requires you to close the graph to continue the result
     :return:
     """
     if future >= test_size:
