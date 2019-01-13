@@ -1,6 +1,7 @@
 from __future__ import print_function
 import numpy as np
 import pandas as pd
+import os
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -128,6 +129,36 @@ def pre_train(path, interval, get_by_interval):
     return csv_mgr
 
 
+def load_checkpoints(ckpt_file):
+    seq = None
+    if os.path.isfile(ckpt_file):
+        print("====>Loading checkpoint '{}'<=====".format(ckpt_file))
+        checkpoint = torch.load(ckpt_file)
+        epochs = checkpoint['num_epochs']
+        num_hidden = checkpoint['num_hidden']
+        num_cells = checkpoint['num_cells']
+        dev = checkpoint['device']
+        if dev == None:
+            dev = "cpu"
+        else:
+            dev = "gpu"
+        seq = Seq2seq(num_hidden=num_hidden, num_cells=num_cells, device=dev)
+        seq.load_state_dict(checkpoint['state_dict'])
+    else:
+        print("====>No checkpoint file '{}' found<====".format(ckpt_file))
+    return seq
+
+
+def save_checkpoints(state, file_name):
+    """
+    Save the trained model and check points related to model
+    :param state: state of the model to save
+    :param file_name: file where to save the model
+    :return:
+    """
+    torch.save(state, file_name)
+
+
 def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hidden, num_cells, lr, print_test_loss=1,
           device=None):
     """
@@ -186,6 +217,7 @@ def train(csv_data, train_to_test, data_col, time_col, seq_l, num_epochs, num_hi
             return l_train
 
         optimizer.step(closure)
+
         with open(pkle_file, 'rb') as file:
             tr_loss = pickle.load(file)
         print(tr_loss)
@@ -305,9 +337,6 @@ if __name__ == '__main__':
     #             num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
     #             print_test_loss=1, device="gpu")
     import csv
-    number_hidden = 51
-    number_cells = 3
-    learning_rate = 0.1
     csv_file = 'C:\\Users\\Swapnil Walke\\PycharmProjects\\Idle_bot\\result'
     header = ["epochs", "seq_l", "num_cells", "num_hidden", "train_loss", "test_loss", "mape"]
     rows = list()
@@ -325,3 +354,40 @@ if __name__ == '__main__':
         writer = csv.writer(file)
         writer.writerows(rows)
     file.close()
+    train_to_test = 0.9
+    data_col = 9
+    time_col = 2
+    device = None
+    print_test_loss = 1
+    seq = train(csv_data=csv_data_mgr, seq_l=seq_length, train_to_test=train_to_test, data_col=data_col, time_col=time_col,
+                num_epochs=number_epochs, num_hidden=number_hidden, num_cells=number_cells, lr=learning_rate,
+                print_test_loss=print_test_loss)
+
+    # Example to save and reload the trained model, which then tested against test data
+    # With below saving methos we can not resume the training, to resume the training you would need to save the
+    # optimizer
+    result_file_path = "C://Users//Mahesh.Bhosale//PycharmProjects//Idle_bot//Predictor//CPU_predictor//Results//"
+    file_name = "c" + str(number_cells) + "h" + str(number_hidden) + "e" + str(number_epochs) \
+                + "seq" + str(seq_length) + ".pth.tar"
+    result_file_path = result_file_path + file_name
+    save_checkpoints({
+        'num_epochs': number_epochs,
+        'num_hidden': number_hidden,
+        'num_cells': number_cells,
+        'device': device,
+        'state_dict': seq.state_dict()}, result_file_path)
+
+    # csv_data is the CSV_FileManager on which you want to run the testing
+    total_size = csv_data_mgr.data.shape[0]
+    train_size = math.floor(total_size * train_to_test)
+    train_size = math.floor(train_size / seq_length) * seq_length
+    test_size = total_size - train_size
+
+    # Give the checkpoint file name to read the values from
+    seq = load_checkpoints(file_name)
+    seq.to(seq.device)
+    seq.double()
+
+    #test on loaded model
+    test(csv_data=csv_data_mgr, train_size=train_size, test_size=total_size - train_size, data_col=data_col,
+         time_col=time_col, seq=seq, future=100, result_file=None, show=0)
